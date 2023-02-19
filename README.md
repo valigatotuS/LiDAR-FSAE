@@ -1,6 +1,11 @@
 # LiDAR-FSAE
 LiDAR R&amp;D &amp; implementation for a formula student race car
 
+## Requirements
+
+- Robot: [Turtlebot3 Burger](https://emanual.robotis.com/docs/en/platform/turtlebot3/features/)
+- Robot software: ROS2 Foxy Fitzroy
+- Computer OS: Ubuntu 20.04
 
 ## Setup
 
