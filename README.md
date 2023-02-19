@@ -9,6 +9,7 @@ Follow setup guide from [ROBOTIS](https://emanual.robotis.com/docs/en/platform/t
 Clone this repository
 
 Open Linux terminal
+
     ./install/setup.bash                                 # update dependencies
     ros2 pkg create --build-type ament_python avoid_cone # build package
     colcon build --packages-select avoid_cone --symlink-install # build specific package
