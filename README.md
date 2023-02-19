@@ -9,7 +9,8 @@ Follow setup guide from [ROBOTIS](https://emanual.robotis.com/docs/en/platform/t
 Clone this repository
 
 Open Linux terminal
-
+    
+    export TURTLEBOT3_MODEL=burger
     ./install/setup.bash                                 # update dependencies
     ros2 pkg create --build-type ament_python avoid_cone # build package
     colcon build --packages-select avoid_cone --symlink-install # build specific package
@@ -17,6 +18,9 @@ Open Linux terminal
     ros2 launch turtlebot3_gazebo empty_world.launch.py  # simulation 
   
 Have fun
+
+    ros2 launch turtlebot3_gazebo turtlebot3_autorace.launch.py # launch simulation in race world
+    
 
 ## Sources 
 
