@@ -9,11 +9,11 @@ Follow setup guide from [ROBOTIS](https://emanual.robotis.com/docs/en/platform/t
 Clone this repository
 
 Open Linux terminal
-  ./install/setup.bash                                 # update dependencies
-  ros2 pkg create --build-type ament_python avoid_cone # build package
-  colcon build --packages-select avoid_cone --symlink-install # build specific package
-  ros2 run avoid_cone avoid_cone                       # run builded package
-  ros2 launch turtlebot3_gazebo empty_world.launch.py  # simulation 
+    ./install/setup.bash                                 # update dependencies
+    ros2 pkg create --build-type ament_python avoid_cone # build package
+    colcon build --packages-select avoid_cone --symlink-install # build specific package
+    ros2 run avoid_cone avoid_cone                       # run builded package
+    ros2 launch turtlebot3_gazebo empty_world.launch.py  # simulation 
   
 Have fun
 
