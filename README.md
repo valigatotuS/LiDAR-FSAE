@@ -27,11 +27,12 @@ Have fun
     ros2 launch turtlebot3_gazebo turtlebot3_autorace.launch.py # launch simulation in race world
     
 
-## Sources 
+## Sources
 
 - [Robotis](https://emanual.robotis.com/docs/en/platform/turtlebot3/quick-start/)
 - Milan Velle, tb3 scripts
 - Jan Lemeire, tb3
+- [AMZ Driverless FSSIM](https://github.com/AMZ-Driverless/fssim)
   
   
   
