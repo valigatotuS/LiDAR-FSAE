@@ -35,14 +35,6 @@ class ConeVisualizer(Node):
         for i in range(n_clusters):
             print("cluster angles:", angles[clusters == i])
             plt.polar(angles[clusters == i], ranges[clusters == i], '.', markersize=1.5, c=colors[i], label=f'Cluster {i}')
-        
-        # Axis and title names
-        plt.title('Clusterized scan')
-        plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left', borderaxespad=0., frameon=True)
-        plt.tight_layout()
-        plt.xlabel('x [m]')
-        plt.ylabel('y [m]')
-        plt.gca().yaxis.set_label_coords(-0.1,0.5) # Moving the y label to the left
 
     def clusterize_scan(self, coord, cluster_th, min_samples):
         # Return labeled scan and number of clusters found
@@ -115,10 +107,19 @@ class ConeVisualizer(Node):
         target_position, target_dist, target_angle = self.midpoint_polar(cluster_centers[0], cluster_centers[1])
 
         # Plotting
-        # self.plot_scan(ranges_m, angles_m)
+        # self.plot_scan(ranges_m, angles_m)        
         self.plot_clusters(ranges_m, angles_m, clusters, n_clusters)
         plt.polar(target_angle, target_dist, 'rx', markersize=10, label='Target') # Plotting the target of steering
-        plt.polar(cluster_centers[:, 1], cluster_centers[:, 0], 'c^', markersize=10, label='Cone') # Plotting the (potential) cones
+        plt.polar(cluster_centers[:, 1], cluster_centers[:, 0], 'c^', markersize=10, label='Cone', alpha=0.5) # Plotting the (potential) cones
+
+
+        # Axis and title names
+        plt.title('Clusterized scan')
+        plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left', borderaxespad=0., frameon=True)
+        plt.tight_layout()
+        plt.xlabel('x [m]')
+        plt.ylabel('y [m]')
+        plt.gca().yaxis.set_label_coords(-0.1,0.5) # Moving the y label to the left
 
         plt.pause(0.001)        # Pausing to allow the plot to be drawn and updated
         plt.clf()               # Clearing the plot             
@@ -127,11 +128,6 @@ class ConeVisualizer(Node):
         if debug:
             # Scan
             print('Scan detected ', len(ranges_m), '(non-inf) ranges.')
-
-            # print("ranges_m: ", ranges_m)
-            # print("angles_m: ", angles_m)
-            # print("ranges: ", ranges)
-            # print("angles: ", angles)
 
             # Number of clusters found
             print('Scan clustered in ', n_clusters, ' clusters.')
