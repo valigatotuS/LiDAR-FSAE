@@ -1,0 +1,50 @@
+## Things discussed & showed
+@Jan, Nick & Marco
+
+- Development, demos & simulations
+    - **Basic steering** ROS2 python scripts
+    - **Perception algorithm** DBSCAN clustering & notebooks with sample data
+    - **Perception plots** polar & cartesian plots
+    - **Target definition** midpoint between closest points in front of the robot
+    - **Live Gazebo simulations** blocking processes
+
+- Topics discussed
+    - **KNN vs DBSCAN**
+    - **thesises & papers**
+    - **Physical tests**
+    - **Outliers filtering**
+    - **Slow recognition lap and SLAM laps**
+
+## Next steps
+
+- Reading thesises and papers (tb3 moving packets for colruyt)
+    - **Weightpoints for the routes** (Sebastian thesis)
+    - **Algorithm & Tests** (Sebastian & Milan thesises)
+    - **SLAM** (Durant Whyte & Cadena papers)
+
+- Processing and driving at the same time.
+    - **Merge the blocking processes** (stop -> process -> turn -> move : must happen concurrently)
+
+- Simulating noise & Improving LiDAR pipeline
+    - **Inserting random noise** in sample data (Gaussian ? Whitenoise ?)
+    - **Removing noise** from sample data
+
+- Measuring processing time of algos
+    - **Measuring LiDAR pipeline sub processes**
+
+- Physical tests with the tb3
+    - **Saving tests**, rosbag or pickle files
+    - **Environment tests**, Testing out on different environments
+
+- Implementing SLAM on the tb3
+    - **Maps**, updating the map in the first round then using map for the other laps
+    - **Overlapping scan and Map**, SLAM & Live scan merging/overlapping  
+
+- Research on path planning 
+    - How are other **formula students** doing ?
+    - What about **F1** engineers calculating that ?
+    - How to make the **routes**
+
+- Testing out FSSIM from AMZ 
+    - **Simulator test**
+    
