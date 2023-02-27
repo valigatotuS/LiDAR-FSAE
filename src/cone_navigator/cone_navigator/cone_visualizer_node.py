@@ -88,23 +88,40 @@ class ConeVisualizer(Node):
         ranges = np.array(msg.ranges) # meters
         angles = np.arange(msg.angle_min, msg.angle_max, msg.angle_increment) # radians
 
+        # Close view of the scan (120 degrees)
+        ranges_f = np.concatenate([ranges[0:60], ranges[-60:]])
+        angles_f = np.concatenate([angles[0:60], angles[-60:]])
+
         # Masking the infinities
         mask = np.isfinite(ranges)
         ranges_m = ranges[mask]
         angles_m = angles[mask]
 
+        mask2 = np.isfinite(ranges_f)
+        ranges_mf = ranges_f[mask2]
+        angles_mf = angles_f[mask2]
+
         # Clusterizing the scan
         coord = np.array([ranges_m * np.cos(angles_m), ranges_m * np.sin(angles_m)]).T
-        clusters, n_clusters = self.clusterize_scan(coord, cluster_th=0.1, min_samples=5)
+        clusters, n_clusters = self.clusterize_scan(coord, cluster_th=0.15, min_samples=5)
         print(n_clusters, ' clusters found')
         print(clusters, ' labels')
 
+        coord_f = np.array([ranges_mf * np.cos(angles_mf), ranges_mf * np.sin(angles_mf)]).T
+        clusters_f, n_clusters_f = self.clusterize_scan(coord_f, cluster_th=0.15, min_samples=5)
+        print(n_clusters_f, 'valid clusters found')
+        
         # Calculating the center of each cluster and sorting them by distance
         cluster_centers = self.find_cluster_centers(ranges_m, angles_m, clusters, n_clusters)
         cluster_centers = cluster_centers[cluster_centers[:, 0].argsort()]
+
+        cluster_centers_f = self.find_cluster_centers(ranges_mf, angles_mf, clusters_f, n_clusters_f)
+        cluster_centers_f = cluster_centers_f[cluster_centers_f[:, 0].argsort()]
         
         # Calculating the distance and angle between the midpoint and the origin
-        target_position, target_dist, target_angle = self.midpoint_polar(cluster_centers[0], cluster_centers[1])
+        target_position, target_dist, target_angle = [0, 0], 0, 0
+        if cluster_centers_f.shape[0] >= 2:
+            target_position, target_dist, target_angle = self.midpoint_polar(cluster_centers_f[0], cluster_centers_f[1])
 
         # Plotting
         # self.plot_scan(ranges_m, angles_m)        
