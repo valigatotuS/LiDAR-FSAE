@@ -76,13 +76,13 @@ class ConeNavigator(Node):
         self.vel_msg.angular.z = 0.0
         self.vel_publisher.publish(self.vel_msg) # stop
 
-    def move(self, length = 0.25):
-        vel_msg = Twist()
+    def move(self, vel_msg, length = 0.25):
         vel_msg.linear.x = self.linear_speed
         self.vel_publisher.publish(vel_msg)
         print("\tmoving forward...")         
         time.sleep(abs(length / self.linear_speed)) # letting the robot move
-        self.vel_publisher.publish(stop_cmd) # stop
+        vel_msg.linear.x = 0.0
+        self.vel_publisher.publish(vel_msg) # stop
 
     def drive2point(self, target_dist, target_angle):
         # simple driving logic
@@ -92,7 +92,7 @@ class ConeNavigator(Node):
             # self.moving = False
             # return 
         if (target_dist > 0.1):
-            self.move(target_dist+0.1)
+            self.move(self.vel_msg, target_dist + 0.1)
         self.moving = False
 
     
@@ -101,7 +101,7 @@ class ConeNavigator(Node):
         ranges = np.array(msg.ranges) # meters
         angles = np.arange(msg.angle_min, msg.angle_max, msg.angle_increment) # radians
 
-        # Only keep the first and last 75 degrees
+        # Only keep the first and last 60 degrees
         ranges = np.concatenate([ranges[0:60], ranges[-60:]])
         angles = np.concatenate([angles[0:60], angles[-60:]])
 
