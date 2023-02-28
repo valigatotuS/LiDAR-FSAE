@@ -21,7 +21,8 @@ setup(
     entry_points={
         'console_scripts': [
             'cone_navigator = cone_navigator.cone_navigator_node:main',
-            'cone_visualizer = cone_navigator.cone_visualizer_node:main'
+            'cone_visualizer = cone_navigator.cone_visualizer_node:main',
+            'test = cone_navigator.test_node:main'
         ],
     },
 )
