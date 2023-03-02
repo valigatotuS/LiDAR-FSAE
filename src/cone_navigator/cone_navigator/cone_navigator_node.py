@@ -18,7 +18,7 @@ class ConeNavigator(Node):
 
         # Tuneable node parameters
         self.angular_speed = 0.2 # rad/s (max is 2.84 rad/s)
-        self.linear_speed = 0.22 # m/s (max is 0.22 m/s)
+        self.linear_speed = 0.15 # m/s (max is 0.22 m/s)
         self.cluster_th = 0.1 # m           # clustering threshold
         self.min_samples = 5                # minimum number of samples in a cluster
         self.hfov = 120 # degrees           # horizontal field of view of the lidar camera
@@ -29,6 +29,7 @@ class ConeNavigator(Node):
         self.target_angle = 0.0 # rad       # angle between the robot and the target point
         self.vel_msg = Twist()              # velocity message (linear and angular velocity, 0 by default)
         self.moving = False                 # flag to indicate if the robot is moving
+        self.obstacle = False               # flag to indicate if the robot is facing an obstacle
 
         # Publishers
         self.vel_publisher = self.create_publisher(Twist, '/cmd_vel', 1000)
@@ -122,7 +123,7 @@ class ConeNavigator(Node):
         vel_msg.linear.x = 0.0
         vel_msg.angular.z =  angular_speed if angle > 0 else -angular_speed
         self.vel_publisher.publish(vel_msg)
-        self.debug("\tturning...")
+        self.info("\tturning...")
         time.sleep(abs(angle/self.angular_speed))
         self.vel_msg.angular.z = 0.0
         self.vel_publisher.publish(self.vel_msg) # stop
@@ -131,7 +132,7 @@ class ConeNavigator(Node):
         vel_msg.linear.x = self.linear_speed
         vel_msg.angular.z = 0.0
         self.vel_publisher.publish(vel_msg)
-        self.debug("\tmoving forward...")        
+        self.info("\tmoving forward...")        
         time.sleep(abs(length / self.linear_speed)) # letting the robot move
         vel_msg.linear.x = 0.0
         self.vel_publisher.publish(vel_msg) # stop
@@ -143,7 +144,7 @@ class ConeNavigator(Node):
         if (abs(target_angle) > np.deg2rad(4)):
             self.turn(self.vel_msg, target_angle, self.angular_speed)
 
-        if (target_dist > 0.05):
+        if (target_dist > 0.05) and not self.obstacle:
             self.move(self.vel_msg, target_dist + 0.1)
 
         self.vel_msg.linear.x = self.linear_speed
@@ -186,13 +187,32 @@ class ConeNavigator(Node):
         ranges = np.array(msg.ranges) # meters
         angles = np.arange(msg.angle_min, msg.angle_max, msg.angle_increment) # radians
 
+        # # Obstacle avoidance
+        # if self.moving or self.obstacle:
+        #     # If the robot is moving, check if there is an obstacle in front of it
+        #     min_dist = 0.10     # is the minimum distance to an obstacle
+        #     angle_range = 80    # is the number of points on each side of the robot
+        #     self.obstacle = False    
+        #     for i in range(0, angle_range):
+        #         if (ranges[i] < min_dist) or (ranges[-i] < min_dist):
+        #             self.obstacle = True
+        #             break
+        #     if self.obstacle:
+        #         # If there is an obstacle, stop the robot
+        #         self.vel_msg.linear.x = 0.0
+        #         self.vel_msg.angular.z = 0.0
+        #         self.vel_publisher.publish(self.vel_msg)
+        #         self.moving = False
+        #         self.warn("\tobstacle detected, stopping...")
+        #         return
+
         # Defining the field of view of the lidar
         fov = self.hfov // 2 # field of view on each side
         ranges = np.concatenate([ranges[0:fov], ranges[-fov:]])
         angles = np.concatenate([angles[0:fov], angles[-fov:]])
 
-        # Masking the infinities
-        mask = np.isfinite(ranges)
+        # Masking the infinities & zeros
+        mask = np.isfinite(ranges) & (ranges > 0.01)
         ranges_m = ranges[mask]
         angles_m = angles[mask]
 

@@ -86,16 +86,17 @@ class ConeVisualizer(Node):
     def scan_callback(self, msg, debug=True): 
         # Getting the ranges and angles from the message
         ranges = np.array(msg.ranges) # meters
-        angles = np.arange(msg.angle_min, msg.angle_max, msg.angle_increment) # radians
+        angles = np.arange(msg.angle_min, msg.angle_max + msg.angle_increment, msg.angle_increment) # radians
+        print(ranges, '###', angles)
 
         # Close view of the scan (120 degrees)
         ranges_f = np.concatenate([ranges[0:60], ranges[-60:]])
         angles_f = np.concatenate([angles[0:60], angles[-60:]])
 
-        # Masking the infinities
-        mask = np.isfinite(ranges)
-        ranges_m = ranges[mask]
-        angles_m = angles[mask]
+        # Masking the infinities & zeros
+        mask = np.isfinite(ranges_f) & (ranges_f > 0.01)
+        ranges_m = ranges_f[mask]
+        angles_m = angles_f[mask]
 
         mask2 = np.isfinite(ranges_f)
         ranges_mf = ranges_f[mask2]
@@ -124,7 +125,7 @@ class ConeVisualizer(Node):
             target_position, target_dist, target_angle = self.midpoint_polar(cluster_centers_f[0], cluster_centers_f[1])
 
         # Plotting
-        # self.plot_scan(ranges_m, angles_m)        
+        # self.plot_scan(ranges, angles)        
         self.plot_clusters(ranges_m, angles_m, clusters, n_clusters)
         plt.polar(target_angle, target_dist, 'rx', markersize=10, label='Target') # Plotting the target of steering
         plt.polar(cluster_centers[:, 1], cluster_centers[:, 0], 'c^', markersize=10, label='Cone', alpha=0.5) # Plotting the (potential) cones
