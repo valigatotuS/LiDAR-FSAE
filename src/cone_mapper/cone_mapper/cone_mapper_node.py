@@ -1,15 +1,13 @@
-import rclpy
+import rclpy, tf2_ros, geometry_msgs.msg, time
 from rclpy.node import Node
 from sensor_msgs.msg import LaserScan
-import numpy as np
-import matplotlib.pyplot as plt
+from nav_msgs.msg import OccupancyGrid, Odometry
+from geometry_msgs.msg import Twist
+from tf2_msgs.msg import TFMessage
+import numpy as np, matplotlib.pyplot as plt
 from rclpy.qos import qos_profile_sensor_data
 from sklearn.cluster import DBSCAN
-from geometry_msgs.msg import Twist
-import time, yaml, os
 from threading import Thread
-
-stop_cmd = Twist()
 
 class ConeMapper(Node):
 
@@ -28,36 +26,31 @@ class ConeMapper(Node):
                 ],
             )
 
-        # Tuneable node parameters
-        self.angular_speed = 0.2 # rad/s (max is 2.84 rad/s)
-        self.linear_speed = 0.15 # m/s (max is 0.22 m/s)
-        self.cluster_th = 0.1 # m           # clustering threshold
-        self.min_samples = 5                # minimum number of samples in a cluster
-        self.hfov = 120 # degrees           # horizontal field of view of the lidar camera
-
         # Variables
+        self.position = np.array([0, 0, 0]) # robot position (x, y, z)
         self.target_position = [0.0, 0.0]   # target point coordinates, this is the point the robot will drive to
         self.target_dist = 0.0 # m          # distance between the robot and the target point
         self.target_angle = 0.0 # rad       # angle between the robot and the target point
         self.vel_msg = Twist()              # velocity message (linear and angular velocity, 0 by default)
         self.moving = False                 # flag to indicate if the robot is moving
         self.obstacle = False               # flag to indicate if the robot is facing an obstacle
+        self.tf_buffer = tf2_ros.Buffer()   # buffer to store the transformations
+        self.tf_listener = tf2_ros.TransformListener(self.tf_buffer, self) # listener to get the transformations
 
         # Publishers
         self.vel_publisher = self.create_publisher(Twist, '/cmd_vel', 1000)
 
         # Subscribtions
-        self.scan_subscription = self.create_subscription(
-            LaserScan,
-            '/scan',
-            self.scan_callback,
-            qos_profile= qos_profile_sensor_data # 5Hz
-        )
+        self.scan_sub = self.create_subscription(LaserScan, '/scan', self.scan_callback, qos_profile= qos_profile_sensor_data)
+        self.map_sub = self.create_subscription(OccupancyGrid, '/map', self.map_callback, qos_profile= qos_profile_sensor_data)
+        # self.tf_sub = self.create_subscription(TFMessage, '/tf', self.tf_callback, qos_profile= qos_profile_sensor_data)
+        # self.odom_sub = self.create_subscription(Odometry, '/odom', self.odom_callback, 10)
+        # subscriber = node.create_subscription(Path, '/trajectory', callback)
         
         # Stopping the robot at initialization
         self.vel_publisher.publish(self.vel_msg) 
 
-        # Logging node initialization
+        # Logging finished  node initialization
         self.info('Cone mapper node initialized.')
 
         return
@@ -79,6 +72,19 @@ class ConeMapper(Node):
     def error(self, msg):
         self.get_logger().error(msg)
         return
+    
+    # --- Getters and setters --- #
+
+    def get_speed(self):
+        return self.vel_msg.linear.x
+    
+    def get_transform(self, parent_frame, child_frame):
+        try:
+            trans = self.tf_buffer.lookup_transform(parent_frame, child_frame, rclpy.time.Time())
+            return trans
+        except (tf2_ros.LookupException, tf2_ros.ConnectivityException, tf2_ros.ExtrapolationException) as e:
+            self.get_logger().error(str(e))
+            return None
     
     # --- Mathemathical functions --- #
 
@@ -113,6 +119,22 @@ class ConeMapper(Node):
 
         return midpoint, distance, angle
     
+    def euler_from_quaternion(self, x, y, z, w):
+        t0 = +2.0 * (w * x + y * z)
+        t1 = +1.0 - 2.0 * (x * x + y * y)
+        roll_x = np.arctan2(t0, t1)
+     
+        t2 = +2.0 * (w * y - z * x)
+        t2 = +1.0 if t2 > +1.0 else t2
+        t2 = -1.0 if t2 < -1.0 else t2
+        pitch_y = np.arcsin(t2)
+     
+        t3 = +2.0 * (w * z + x * y)
+        t4 = +1.0 - 2.0 * (y * y + z * z)
+        yaw_z = np.arctan2(t3, t4)
+     
+        return roll_x, pitch_y, yaw_z # in radians
+    
     def find_target(self, cluster_centers):
         # Filtering clusters out that are too close to the robot
         cluster_centers = cluster_centers[cluster_centers[:, 0] > 0.1] 
@@ -136,31 +158,32 @@ class ConeMapper(Node):
         vel_msg.angular.z =  angular_speed if angle > 0 else -angular_speed
         self.vel_publisher.publish(vel_msg)
         self.info("\tturning...")
-        time.sleep(abs(angle/self.angular_speed))
+        time.sleep(abs(angle/angular_speed))
         self.vel_msg.angular.z = 0.0
         self.vel_publisher.publish(self.vel_msg) # stop
 
     def move(self, vel_msg, length = 0.25):
-        vel_msg.linear.x = self.linear_speed
+        vel_msg.linear.x = self.get_parameter('linear_speed').value
         vel_msg.angular.z = 0.0
         self.vel_publisher.publish(vel_msg)
         self.info("\tmoving forward...")        
-        time.sleep(abs(length / self.linear_speed)) # letting the robot move
+        time.sleep(abs(length / self.get_parameter('linear_speed').value)) # letting the robot move
         vel_msg.linear.x = 0.0
         self.vel_publisher.publish(vel_msg) # stop
 
     def drive2point(self, target_dist, target_angle):   # /!\ note /!\ works well at low speeds, less at high speeds
         # simple driving logic (turning, then moving forward)
         self.moving = True
+        angular_speed = self.get_parameter('angular_speed').value
 
         if (abs(target_angle) > np.deg2rad(4)):
-            self.turn(self.vel_msg, target_angle, self.angular_speed)
+            self.turn(self.vel_msg, target_angle, angular_speed)
 
         if (target_dist > 0.05) and not self.obstacle:
             self.move(self.vel_msg, target_dist + 0.1)
 
-        self.vel_msg.linear.x = self.linear_speed
-        self.vel_msg.angular.z =  self.angular_speed if target_angle > 0 else -self.angular_speed
+        self.vel_msg.linear.x = self.get_parameter('linear_speed').value
+        self.vel_msg.angular.z =  angular_speed if target_angle > 0 else -angular_speed
 
         self.moving = False
 
@@ -173,16 +196,16 @@ class ConeMapper(Node):
         while True:
             if (abs(self.target_angle) > np.deg2rad(3)):
                 # turn and move forward at the same time
-                self.vel_msg.linear.x = self.linear_speed*0.3
-                self.vel_msg.angular.z = self.angular_speed if self.target_angle > 0 else -self.angular_speed
+                self.vel_msg.linear.x = self.get_parameter('linear_speed').value*0.3
+                self.vel_msg.angular.z = self.get_parameter('angular_speed').value if self.target_angle > 0 else -self.get_parameter('angular_speed').value
                 self.vel_publisher.publish(self.vel_msg)
-                time.sleep(abs(self.target_angle / self.angular_speed))
+                time.sleep(abs(self.target_angle / self.get_parameter('angular_speed').value))
             elif (self.target_dist > 0.05):
                 # move forward
-                self.vel_msg.linear.x = self.linear_speed
+                self.vel_msg.linear.x = self.get_parameter('linear_speed').value
                 self.vel_msg.angular.z = 0.0
                 self.vel_publisher.publish(self.vel_msg)
-                time.sleep(abs(self.target_dist / self.linear_speed))
+                time.sleep(abs(self.target_dist / self.get_parameter('linear_speed').value))
             else:
                 # stop the robot
                 self.vel_msg.linear.x = 0.0
@@ -193,7 +216,41 @@ class ConeMapper(Node):
         self.moving = False
 
     # --- Callback functions --- #
-    
+
+    def map_callback(self, msg):
+        map_data = np.array(msg.data).reshape((msg.info.height, msg.info.width))
+        map_data = np.flipud(map_data)  # Flip the image vertically
+        map_data = 100 - map_data       # Invert the colors
+
+        # Plotting
+
+        trans = self.get_transform("map", "base_link")
+        if trans is not None:
+            robot_pos = trans.transform.translation
+            q = trans.transform.rotation # quaternion is a 4-tuple (x, y, z, w) which represents the rotation
+            roll, pitch, yaw = self.euler_from_quaternion(q.x, q.y, q.z, q.w)
+            speed = self.get_speed()
+
+            # Plotting the robot's position on the map
+            plt.plot(robot_pos.x, robot_pos.y, 'ro', markersize=2) 
+            # Plotting the robot's orientation the map
+            plt.arrow(robot_pos.x, robot_pos.y, speed*np.cos(yaw), speed*np.sin(yaw), head_width=0.05, head_length=0.1, fc='r', ec='r') # Robot's orientation on the map
+            # Draw the robot's FOV
+            fov = np.deg2rad(self.get_parameter('hfov').value)
+            plt.plot([robot_pos.x, robot_pos.x + 0.6*np.cos(yaw - fov/2)], [robot_pos.y, robot_pos.y + 0.6*np.sin(yaw - fov/2)], 'm--', label='FOV')
+            plt.plot([robot_pos.x, robot_pos.x + 0.6*np.cos(yaw + fov/2)], [robot_pos.y, robot_pos.y + 0.6*np.sin(yaw + fov/2)], 'm--')
+
+        # Plotting the map and rescaling it to the correct size
+        plt.imshow(map_data, cmap='gray', extent=[msg.info.origin.position.x, 
+                                                  msg.info.origin.position.x + msg.info.width*msg.info.resolution, 
+                                                  msg.info.origin.position.y, 
+                                                  msg.info.origin.position.y + msg.info.height*msg.info.resolution])
+        plt.title('SLAM Map: Cartographer')
+        plt.axis('equal')               # Setting the aspect ratio to 1
+        plt.pause(0.001)        # Pausing to allow the plot to be drawn and updated
+        plt.clf()               # Clearing the plot
+ 
+
     def scan_callback(self, msg): 
         # Getting the ranges and angles from the message
         ranges = np.array(msg.ranges) # meters
@@ -219,7 +276,7 @@ class ConeMapper(Node):
         #         return
 
         # Defining the field of view of the lidar
-        fov = self.hfov // 2 # field of view on each side
+        fov = self.get_parameter('hfov').value // 2 # field of view on each side
         ranges = np.concatenate([ranges[0:fov], ranges[-fov:]])
         angles = np.concatenate([angles[0:fov], angles[-fov:]])
 
@@ -235,7 +292,7 @@ class ConeMapper(Node):
 
         # Clusterizing the scan
         coord = np.array([ranges_m * np.cos(angles_m), ranges_m * np.sin(angles_m)]).T
-        clusters, n_clusters = self.clusterize_scan(coord, cluster_th=self.cluster_th, min_samples=self.min_samples)
+        clusters, n_clusters = self.clusterize_scan(coord, cluster_th=self.get_parameter('cluster_th').value, min_samples=self.get_parameter('min_samples').value)
 
         # Calculating the center of each cluster 
         cluster_centers = self.find_cluster_centers(ranges_m, angles_m, clusters, n_clusters)
@@ -270,12 +327,6 @@ def main(args=None):
     rclpy.init(args=args)
     cone_mapper = ConeMapper()
     
-    # # Loading the parameters from the YAML file
-    # config_path = os.path.join(os.getcwd(), 'config/params.yml')
-    # with open(config_path, 'r') as f:
-    #     params = yaml.safe_load(f)
-    #     cone_mapper.set_parameters(params)
-
     input("Press Enter to start...") # Blocking call, waiting for user to press enter to start the node
 
     rclpy.spin(cone_mapper)
