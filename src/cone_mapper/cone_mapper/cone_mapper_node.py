@@ -1,13 +1,15 @@
-import rclpy, tf2_ros, geometry_msgs.msg, time
+import rclpy, tf2_ros, geometry_msgs.msg, time, os
 from rclpy.node import Node
 from sensor_msgs.msg import LaserScan
-from nav_msgs.msg import OccupancyGrid, Odometry
+from nav_msgs.msg import OccupancyGrid, Path, Odometry
+from visualization_msgs.msg import MarkerArray
 from geometry_msgs.msg import Twist
 from tf2_msgs.msg import TFMessage
 import numpy as np, matplotlib.pyplot as plt
 from rclpy.qos import qos_profile_sensor_data
 from sklearn.cluster import DBSCAN
 from threading import Thread
+import subprocess
 
 class ConeMapper(Node):
 
@@ -36,6 +38,7 @@ class ConeMapper(Node):
         self.obstacle = False               # flag to indicate if the robot is facing an obstacle
         self.tf_buffer = tf2_ros.Buffer()   # buffer to store the transformations
         self.tf_listener = tf2_ros.TransformListener(self.tf_buffer, self) # listener to get the transformations
+        self.trajectory = []                # trajectory of the robot
 
         # Publishers
         self.vel_publisher = self.create_publisher(Twist, '/cmd_vel', 1000)
@@ -43,12 +46,17 @@ class ConeMapper(Node):
         # Subscribtions
         self.scan_sub = self.create_subscription(LaserScan, '/scan', self.scan_callback, qos_profile= qos_profile_sensor_data)
         self.map_sub = self.create_subscription(OccupancyGrid, '/map', self.map_callback, qos_profile= qos_profile_sensor_data)
+        # self.trajectory_sub = self.create_subscription(MarkerArray, '/trajectory_node_list', self.trajectory_callback, qos_profile = qos_profile_sensor_data)
         # self.tf_sub = self.create_subscription(TFMessage, '/tf', self.tf_callback, qos_profile= qos_profile_sensor_data)
         # self.odom_sub = self.create_subscription(Odometry, '/odom', self.odom_callback, 10)
         # subscriber = node.create_subscription(Path, '/trajectory', callback)
         
         # Stopping the robot at initialization
         self.vel_publisher.publish(self.vel_msg) 
+
+        # Launch cartographer node in an other terminal window
+        # subprocess.call(['gnome-terminal', '-x', 'ros_env && ros2 launch turtlebot3_cartographer cartographer.launch.py'])
+        # os.system('ros2 launch turtlebot3_cartographer cartographer.launch.py')
 
         # Logging finished  node initialization
         self.info('Cone mapper node initialized.')
@@ -217,16 +225,26 @@ class ConeMapper(Node):
 
     # --- Callback functions --- #
 
+    def trajectory_callback(self, msg):
+        print("trajectory_callback")
+        trajectory = []
+
+
     def map_callback(self, msg):
         map_data = np.array(msg.data).reshape((msg.info.height, msg.info.width))
         map_data = np.flipud(map_data)  # Flip the image vertically
         map_data = 100 - map_data       # Invert the colors
+
+        # import pickle
+        # with open('map_data2.pickle', 'wb') as f:
+        #     pickle.dump(map_data, f)
 
         # Plotting
 
         trans = self.get_transform("map", "base_link")
         if trans is not None:
             robot_pos = trans.transform.translation
+            self.trajectory.append([robot_pos.x, robot_pos.y])
             q = trans.transform.rotation # quaternion is a 4-tuple (x, y, z, w) which represents the rotation
             roll, pitch, yaw = self.euler_from_quaternion(q.x, q.y, q.z, q.w)
             speed = self.get_speed()
@@ -240,11 +258,23 @@ class ConeMapper(Node):
             plt.plot([robot_pos.x, robot_pos.x + 0.6*np.cos(yaw - fov/2)], [robot_pos.y, robot_pos.y + 0.6*np.sin(yaw - fov/2)], 'm--', label='FOV')
             plt.plot([robot_pos.x, robot_pos.x + 0.6*np.cos(yaw + fov/2)], [robot_pos.y, robot_pos.y + 0.6*np.sin(yaw + fov/2)], 'm--')
 
+        # Plotting the trajectory
+        if len(self.trajectory) >= 2:
+            trajectory = np.array(self.trajectory)
+            plt.plot(trajectory[:,0], trajectory[:,1], 'r--', linewidth=0.5)
+
         # Plotting the map and rescaling it to the correct size
         plt.imshow(map_data, cmap='gray', extent=[msg.info.origin.position.x, 
                                                   msg.info.origin.position.x + msg.info.width*msg.info.resolution, 
                                                   msg.info.origin.position.y, 
                                                   msg.info.origin.position.y + msg.info.height*msg.info.resolution])
+        
+        print("msg.info.origin.position.x: ", msg.info.origin.position.x)
+        print("msg.info.origin.position.y: ", msg.info.origin.position.y)
+        print("msg.info.width: ", msg.info.width)
+        print("msg.info.height: ", msg.info.height)
+        print("msg.info.resolution: ", msg.info.resolution)
+
         plt.title('SLAM Map: Cartographer')
         plt.axis('equal')               # Setting the aspect ratio to 1
         plt.pause(0.001)        # Pausing to allow the plot to be drawn and updated
