@@ -39,6 +39,9 @@ class ConeMapper(Node):
         self.tf_buffer = tf2_ros.Buffer()   # buffer to store the transformations
         self.tf_listener = tf2_ros.TransformListener(self.tf_buffer, self) # listener to get the transformations
         self.trajectory = []                # trajectory of the robot
+        self.start = True                   # flag to indicate if the robot is at the start position
+        self.start_position = None          # start position of the robot
+        self.lap = 0                        # number of laps completed
 
         # Publishers
         self.vel_publisher = self.create_publisher(Twist, '/cmd_vel', 1000)
@@ -93,6 +96,14 @@ class ConeMapper(Node):
         except (tf2_ros.LookupException, tf2_ros.ConnectivityException, tf2_ros.ExtrapolationException) as e:
             self.get_logger().error(str(e))
             return None
+        
+    def get_position(self):
+        trans = self.get_transform("map", "base_link")
+        if trans is not None:
+            robot_pos = trans.transform.translation
+        else:
+            return [-1, -1, -1]
+        return [robot_pos.x, robot_pos.y, robot_pos.z]
     
     # --- Mathemathical functions --- #
 
@@ -244,6 +255,7 @@ class ConeMapper(Node):
         trans = self.get_transform("map", "base_link")
         if trans is not None:
             robot_pos = trans.transform.translation
+            self.position = [robot_pos.x, robot_pos.y, robot_pos.z]
             self.trajectory.append([robot_pos.x, robot_pos.y])
             q = trans.transform.rotation # quaternion is a 4-tuple (x, y, z, w) which represents the rotation
             roll, pitch, yaw = self.euler_from_quaternion(q.x, q.y, q.z, q.w)
@@ -264,18 +276,24 @@ class ConeMapper(Node):
             plt.plot(trajectory[:,0], trajectory[:,1], 'r--', linewidth=0.5)
 
         # Plotting the map and rescaling it to the correct size
+        plt.title('X: %i, Y: %i, Z: %i' % (self.position[0], self.position[1], self.position[2]))
         plt.imshow(map_data, cmap='gray', extent=[msg.info.origin.position.x, 
                                                   msg.info.origin.position.x + msg.info.width*msg.info.resolution, 
                                                   msg.info.origin.position.y, 
                                                   msg.info.origin.position.y + msg.info.height*msg.info.resolution])
+                                                  
         
-        print("msg.info.origin.position.x: ", msg.info.origin.position.x)
-        print("msg.info.origin.position.y: ", msg.info.origin.position.y)
-        print("msg.info.width: ", msg.info.width)
-        print("msg.info.height: ", msg.info.height)
-        print("msg.info.resolution: ", msg.info.resolution)
+        
+        
 
-        plt.title('SLAM Map: Cartographer')
+        # print("msg.info.origin.position.x: ", msg.info.origin.position.x)
+        # print("msg.info.origin.position.y: ", msg.info.origin.position.y)
+        # print("msg.info.width: ", msg.info.width)
+        # print("msg.info.height: ", msg.info.height)
+        # print("msg.info.resolution: ", msg.info.resolution)
+
+        # plt.title('SLAM Map: Cartographer')
+        plt.title('X: %.4f, Y: %.4f, Z: %.4f' % (self.position[0], self.position[1], self.position[2]))
         plt.axis('equal')               # Setting the aspect ratio to 1
         plt.pause(0.001)        # Pausing to allow the plot to be drawn and updated
         plt.clf()               # Clearing the plot
@@ -285,6 +303,15 @@ class ConeMapper(Node):
         # Getting the ranges and angles from the message
         ranges = np.array(msg.ranges) # meters
         angles = np.arange(msg.angle_min, msg.angle_max, msg.angle_increment) # radians
+
+        self.position = self.get_position()
+        # check if the robot is on start position
+        if not self.start and ((0 < abs(self.position[0]) and abs(self.position[0]) < 0.1)) and ((0 < abs(self.position[1]) and abs(self.position[1]) < 0.1)):
+            self.start = True
+            self.lap += 1
+            input("Robot is on start position, %i lap(s) completed. Press enter to continue..." % self.lap)
+        elif (abs(self.position[0]) > 0.1) and abs(self.position[1]) > 0.1:
+            self.start = False
 
         # # Obstacle avoidance
         # if self.moving or self.obstacle:
