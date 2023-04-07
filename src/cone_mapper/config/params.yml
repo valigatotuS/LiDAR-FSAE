@@ -1,7 +1,0 @@
-/cone_mapper:
-  ros__parameters:
-    angular_speed: 0.2
-    linear_speed: 0.15
-    cluster_th: 0.1
-    min_samples: 5
-    hfov: 120
